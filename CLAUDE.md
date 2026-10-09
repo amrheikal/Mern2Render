@@ -14,9 +14,15 @@ There is no root package.json or workspace config — each package is installed 
 ## Commands
 
 ### Backend (`backend/`)
-- `npm run dev` — starts the API with nodemon + ts-node (watches `src`, entry point `src/index.ts`). There is no build/start/test/lint script defined.
-- Server listens on port `3001` (hardcoded in `src/index.ts`).
-- Requires `backend/.env` (see `.env.example`): `JWT_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`. Note: `DATABASE_URL` is defined in `.env.example` but **not actually used** — the Mongo connection string is hardcoded in `src/index.ts` as `mongodb://127.0.0.1:27017/ecomm`. A local MongoDB instance must be running on the default port.
+- `npm run dev` — starts the API with nodemon + ts-node (watches `src`, entry point `src/index.ts`).
+- `npm run build` — `tsc` into `backend/dist/`; `npm start` — `node dist/index.js`.
+- Server listens on `process.env.PORT`, falling back to `3001`.
+- Requires `backend/.env` (see `.env.example`): `NODE_ENV`, `JWT_SECRET`, `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`.
+- `NODE_ENV=production` makes the backend serve `frontend2/dist` plus an SPA fallback, and turns CORS off. Any other value enables CORS for `http://localhost:5173` only, and the frontend is served by Vite.
+
+### Root (`package.json`) — deployment (Render, single web service)
+- `npm run build` — installs both packages (`--include=dev`, so that it still works when `NODE_ENV=production`), then builds backend and frontend.
+- `npm start` — runs the compiled backend, which serves API + frontend on one origin.
 - On every server start, `seedInitialProducts()` and `seedAdminUser()` run automatically (idempotent — they check for existing data first). `seedAdminUser` promotes/creates the admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD`.
 
 ### Frontend (`frontend2/`)
@@ -25,13 +31,13 @@ There is no root package.json or workspace config — each package is installed 
 - `npm run lint` — ESLint (flat config in `eslint.config.js`).
 - `npm run preview` — preview the production build.
 - No test runner/framework is configured in either package.
-- `src/constants/baseUrl.ts` hardcodes `BASE_URL = "http://localhost:3001"` — the frontend always targets the local backend directly (no proxy, no env var).
+- `src/constants/baseUrl.ts`: `BASE_URL` is `http://localhost:3001/api` in dev (`import.meta.env.DEV`), and the relative `/api` in production (same origin). `resolveImageUrl` prefixes `/uploads/...` paths with the server origin, without `/api`.
 
 ## Backend architecture
 
 Layered per-domain structure: `routes/` (HTTP wiring, request/response only) → `services/` (business logic, return `{ data, statusCode }` tuples consumed directly by routes) → `models/` (Mongoose schemas). Route handlers never touch Mongoose directly; they call a service function and forward its `statusCode`/`data`.
 
-Domains: `user` (auth, orders), `product` (catalog + admin CRUD), `cart` (active cart + checkout), `admin` (dashboard stats). Route files mount at `/user`, `/product`, `/cart`, `/admin` in `src/index.ts`.
+Domains: `user` (auth, orders), `product` (catalog + admin CRUD), `cart` (active cart + checkout), `admin` (dashboard stats). Route files mount at `/api/user`, `/api/product`, `/api/cart`, `/api/admin` in `src/index.ts`. The `/api` prefix is required because SPA routes such as `/cart` and `/admin` would otherwise collide with API routes when one server serves both.
 
 Auth/authorization middleware chain, applied in order on protected routes:
 1. `validateJWT` — reads `Authorization: Bearer <token>`, verifies with `JWT_SECRET`, loads the full user document from Mongo by the email in the token payload, and attaches it as `req.user` (typed via `ExtendRequest` in `src/types/extendedRequest.ts`). Note it does not itself reject a missing/deleted user — `req.user` can be `undefined` after this middleware.

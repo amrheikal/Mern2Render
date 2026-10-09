@@ -11,31 +11,49 @@ import { seedInitialProducts } from "./services/productService";
 import { seedAdminUser } from "./services/userService";
 import { UPLOADS_DIR } from "./middlewares/uploadImage";
 import cors from "cors";
+import dns from "dns";
 
 dotenv.config();
 
 const app = express();
-const port = 3001;
+const port = Number(process.env.PORT) || 3001;
+const isProduction = process.env.NODE_ENV === "production";
 
 app.use(express.json());
-app.use(cors());
+
+// Some local networks hand out an IPv6 link-local DNS server (fe80::1) that Node's
+// resolver can't use, so the mongodb+srv SRV lookup fails with ECONNREFUSED.
+// Use public resolvers locally; Render's DNS works fine in production.
+if (!isProduction) {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+}
+
+// In development the Vite dev server (5173) calls the API cross-origin.
+// In production the API serves the built frontend itself, so no CORS is needed.
+if (!isProduction) {
+  app.use(cors({ origin: "http://localhost:5173" }));
+}
 
 // Product images uploaded from the admin dashboard.
 app.use("/uploads", express.static(UPLOADS_DIR));
 
-app.use("/user", userRoute);
-app.use("/product", productRoute);
-app.use("/cart", cartRoute);
-app.use("/admin", adminRoute);
+// API routes live under /api so they never collide with SPA routes (e.g. /cart, /admin).
+app.use("/api/user", userRoute);
+app.use("/api/product", productRoute);
+app.use("/api/cart", cartRoute);
+app.use("/api/admin", adminRoute);
 
-// Serve the built frontend (run `npm run build` in frontend2/ first).
-const FRONTEND_DIST = path.join(__dirname, "../../frontend2/dist");
-app.use(express.static(FRONTEND_DIST));
+if (isProduction) {
+  // Serve the built frontend (`npm run build` at the project root builds it).
+  // Same relative path from src/ (ts-node) and dist/ (compiled).
+  const FRONTEND_DIST = path.join(__dirname, "../../frontend2/dist");
+  app.use(express.static(FRONTEND_DIST));
 
-// SPA fallback: any non-API route falls through to index.html so React Router can handle it.
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(FRONTEND_DIST, "index.html"));
-});
+  // SPA fallback: any non-API route falls through to index.html so React Router can handle it.
+  app.get(/^(?!\/api\/|\/uploads\/).*/, (_req, res) => {
+    res.sendFile(path.join(FRONTEND_DIST, "index.html"));
+  });
+}
 
 const startServer = async () => {
   try {
@@ -51,10 +69,13 @@ const startServer = async () => {
     await seedAdminUser();
 
     app.listen(port, () => {
-      console.log(`Server is running at: http://localhost:${port}`);
+      console.log(
+        `Server is running at: http://localhost:${port} (${isProduction ? "production" : "development"})`
+      );
     });
   } catch (err) {
     console.log("Failed to connect!", err);
+    process.exit(1);
   }
 };
 

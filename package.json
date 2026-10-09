@@ -1,0 +1,26 @@
+{
+  "name": "e-commerce-mern2",
+  "version": "1.0.0",
+  "description": "This is the E-Commerce Project created in the Udemy MERN Stack course.",
+  "main": "index.js",
+  "scripts": {
+    "install:all": "npm install --prefix backend --include=dev && npm install --prefix frontend2 --include=dev",
+    "build": "npm run install:all && npm run build --prefix backend && npm run build --prefix frontend2",
+    "start": "npm start --prefix backend"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amrheikal/Mern2Render.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/amrheikal/Mern2Render/issues"
+  },
+  "homepage": "https://github.com/amrheikal/Mern2Render#readme"
+}
